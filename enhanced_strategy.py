@@ -22,6 +22,10 @@ class EnhancedTradingStrategy:
         self.data_cache = {}
         self.open_positions = {}
         
+        # Trailing Stop Configuration
+        self.trailing_activation = 5.0  # Trigger at $5 profit
+        self.trailing_offset = 2.0      # Trail $2 behind (starts from 3rd $)
+        
     def log(self, message: str):
         timestamp = datetime.now().strftime("%H:%M:%S")
         print(f"[{timestamp}] [{self.symbol}] {message}")
@@ -163,35 +167,22 @@ class EnhancedTradingStrategy:
         ema9 = close.ewm(span=9, adjust=False).mean()
         ema21 = close.ewm(span=21, adjust=False).mean()
         
-        # Entry SuperTrend (Period=10, Multiplier=0.9)
-        entry_st = self.calculate_supertrend_pinescript(df, atr_length=10, atr_multiplier=0.9, smoothing_period=1)
-        
-        # Exit SuperTrend (Period=10, Multiplier=0.9)
-        exit_st = self.calculate_supertrend_pinescript(df, atr_length=10, atr_multiplier=0.9, smoothing_period=1)
-        
-        # Calculate trend extreme stop loss
-        # Use previous closed candle direction to avoid flickering on current forming candle
-        current_direction = entry_st['direction'].iloc[-1]
-        exit_direction = exit_st['direction'].iloc[-1]
-
-        trend_extreme_sl = self.get_trend_extreme_stop_loss(
-            entry_st['supertrend'], 
-            entry_st['direction'], 
-            current_direction
-        )
+        # ATR calculation (Wilder's, 14 period)
+        tr1 = df['high'] - df['low']
+        tr2 = (df['high'] - close.shift()).abs()
+        tr3 = (df['low'] - close.shift()).abs()
+        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+        atr_val = tr.ewm(alpha=1.0/14, adjust=False).mean()
         
         return {
                 'rsi': rsi.iloc[-1] if len(rsi) > 0 and not pd.isna(rsi.iloc[-1]) else 50,
                 'ema9': ema9.iloc[-1] if len(ema9) > 0 and not pd.isna(ema9.iloc[-1]) else close.iloc[-1],
                 'ema21': ema21.iloc[-1] if len(ema21) > 0 and not pd.isna(ema21.iloc[-1]) else close.iloc[-1],
                 'candle_color': 'GREEN' if close.iloc[-1] > df['open'].iloc[-1] else 'RED',
-                'supertrend_direction': current_direction,
-                'supertrend_exit_direction': exit_direction,
-                'atr': entry_st['atr'].iloc[-1] if len(entry_st['atr']) > 0 and not pd.isna(entry_st['atr'].iloc[-1]) else 0.01,
+                'atr': atr_val.iloc[-1] if len(atr_val) > 0 and not pd.isna(atr_val.iloc[-1]) else 0.01,
                 'close': close.iloc[-1],
-                'supertrend_value': entry_st['supertrend'].iloc[-1] if len(entry_st['supertrend']) > 0 else 0,
-                'supertrend_exit_value': exit_st['supertrend'].iloc[-1] if len(exit_st['supertrend']) > 0 else 0,
-                'trend_extreme_sl': trend_extreme_sl
+                'low': df['low'].iloc[-1],
+                'high': df['high'].iloc[-1]
             }
 
 
@@ -205,19 +196,23 @@ class EnhancedTradingStrategy:
         ema9 = analysis.get('ema9', 0)
         ema21 = analysis.get('ema21', 0)
         candle_color = analysis.get('candle_color', '')
+        low = analysis.get('low', 0)
+        high = analysis.get('high', 0)
 
-        # BUY: RSI > 50, Green candle, EMA9 > EMA21
+        # BUY Condition: RSI(14) > 50, EMA 9 > EMA 21, Green Candle, Candle Low > EMA 9
         buy_conditions = (
             rsi > 50 and
+            ema9 > ema21 and
             candle_color == 'GREEN' and
-            ema9 > ema21
+            low > ema9
         )
 
-        # SELL: RSI < 50, Red candle, EMA9 < EMA21
+        # SELL Condition: RSI(14) < 50, EMA 9 < EMA 21, Red Candle, Candle High < EMA 9
         sell_conditions = (
             rsi < 50 and
+            ema9 < ema21 and
             candle_color == 'RED' and
-            ema9 < ema21
+            high < ema9
         )
 
         if buy_conditions:
@@ -329,8 +324,46 @@ class EnhancedTradingStrategy:
             self.log(f"❌ Error executing trade: {e}")
 
     def check_exit_conditions(self):
-        """Check exit conditions - relies only on SL/TP, no dynamic exits"""
-        pass
+        """Check exit conditions and implement trailing stop loss"""
+        positions = mt5.positions_get(symbol=self.symbol)
+        if not positions:
+            return
+
+        tick = mt5.symbol_info_tick(self.symbol)
+        if not tick:
+            return
+
+        for pos in positions:
+            ticket = pos.ticket
+            entry_price = pos.price_open
+            current_sl = pos.sl
+            current_tp = pos.tp
+            
+            if pos.type == mt5.POSITION_TYPE_BUY:
+                current_price = tick.bid
+                profit = current_price - entry_price
+                
+                # Check for trailing stop activation
+                if profit >= self.trailing_activation:
+                    new_sl = current_price - self.trailing_offset
+                    # Only move SL up
+                    if current_sl == 0 or new_sl > current_sl:
+                        self.log(f"🚀 Trailing SL Triggered for BUY #{ticket}")
+                        self.log(f"   Profit: ${profit:.2f} | New SL: {new_sl:.2f}")
+                        self.modify_position(ticket, new_sl, current_tp)
+            
+            elif pos.type == mt5.POSITION_TYPE_SELL:
+                current_price = tick.ask
+                profit = entry_price - current_price
+                
+                # Check for trailing stop activation
+                if profit >= self.trailing_activation:
+                    new_sl = current_price + self.trailing_offset
+                    # Only move SL down
+                    if current_sl == 0 or new_sl < current_sl:
+                        self.log(f"🚀 Trailing SL Triggered for SELL #{ticket}")
+                        self.log(f"   Profit: ${profit:.2f} | New SL: {new_sl:.2f}")
+                        self.modify_position(ticket, new_sl, current_tp)
 
     def modify_position(self, ticket: int, new_sl: float, new_tp: float):
         """Modify position stop loss and take profit"""
@@ -367,9 +400,8 @@ class EnhancedTradingStrategy:
         
         # Log current market conditions
         self.log(f"RSI: {analysis.get('rsi', 0):.2f}")
-        self.log(f"EMA9: {analysis.get('ema9', 0):.5f}")
-        self.log(f"EMA21: {analysis.get('ema21', 0):.5f}")
-        self.log(f"Candle: {analysis.get('candle_color', '')}")
+        self.log(f"EMA9: {analysis.get('ema9', 0):.5f} | EMA21: {analysis.get('ema21', 0):.5f}")
+        self.log(f"Candle: {analysis.get('candle_color', '')} | Low: {analysis.get('low', 0):.5f} | High: {analysis.get('high', 0):.5f}")
 
         # Check for entry signals
         signal = self.check_entry_conditions(analysis)
