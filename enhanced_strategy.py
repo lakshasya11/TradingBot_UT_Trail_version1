@@ -23,7 +23,7 @@ class EnhancedTradingStrategy:
         self.open_positions = {}
         
         # Exit Configuration
-        self.atr_sl_multiplier = 2.5    # Stop loss at 2.5x ATR
+        self.atr_sl_multiplier = 2.0    # Stop loss at 2.0x ATR
         self.tp_usd = 10.0              # Take profit at $10
         self.trailing_activation = 5.0  # Activate trailing + breakeven at $5 profit
         self.trailing_offset = 2.0      # Trail $2 behind current price
@@ -117,7 +117,7 @@ class EnhancedTradingStrategy:
 
 
 
-    def calculate_atr(self, df: pd.DataFrame, period: int = 5) -> pd.Series:
+    def calculate_atr(self, df: pd.DataFrame, period: int = 14) -> pd.Series:
         """Calculate ATR using Wilder's smoothing (RMA)"""
         tr1 = df['high'] - df['low']
         tr2 = (df['high'] - df['close'].shift()).abs()
@@ -174,7 +174,7 @@ class EnhancedTradingStrategy:
         tr2 = (df['high'] - close.shift()).abs()
         tr3 = (df['low'] - close.shift()).abs()
         tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        atr_val = tr.ewm(alpha=1.0/5, adjust=False).mean()
+        atr_val = tr.ewm(alpha=1.0/14, adjust=False).mean()
         
         return {
                 'rsi': rsi.iloc[-1] if len(rsi) > 0 and not pd.isna(rsi.iloc[-1]) else 50,
