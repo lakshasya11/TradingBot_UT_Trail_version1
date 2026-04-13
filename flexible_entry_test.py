@@ -196,16 +196,16 @@ def check_target_profit_points(pos, current_price, logger):
     return False, None
 
 def check_adaptive_atr_stoploss(pos, current_price, atr):
-    """Exit if trade moves 2.5x ATR against entry price."""
+    """Exit if trade moves 1.5x ATR against entry price."""
     pos_type = "BUY" if pos.type == 0 else "SELL"
     entry_price = pos.price_open
     
-    # 2.5x ATR dynamic threshold
-    atr_threshold = atr * 2.5
+    # 1.5x ATR dynamic threshold
+    atr_threshold = atr * 1.5
     adverse_movement = (entry_price - current_price) if pos_type == "BUY" else (current_price - entry_price)
 
     if adverse_movement >= atr_threshold:
-        return True, f"2.5x ATR Adaptive SL (ATR: {atr:.2f} | Loss: ${adverse_movement:.2f})"
+        return True, f"1.5x ATR Adaptive SL (ATR: {atr:.2f} | Loss: ${adverse_movement:.2f})"
 
     return False, None
 
@@ -338,7 +338,7 @@ def print_trade_exit(time_display, pos_type, ticket, entry_price, exit_price, du
         "SIDEWAY MARKET EXIT": Colors.YELLOW,
         "$2 Trailing Stop": Colors.CYAN,
         "Profit Protection": Colors.GREEN, 
-        "2.5x ATR Adaptive SL": Colors.RED,
+        "1.5x ATR Adaptive SL": Colors.RED,
         "$10 Target Profit": Colors.GREEN,
         "Breakeven Exit": Colors.YELLOW,
         "Angle Weakness": Colors.YELLOW,
@@ -743,7 +743,7 @@ def complete_entry_analysis():
     print(f"\n[ZERO-LATENCY TRADING SYSTEM ACTIVE]")
     print(f"Symbol: {symbol}")
     print(f"Entry: BUY(RSI>50 + Green + EMA9>EMA21 + Low>EMA9) | SELL(RSI<50 + Red + EMA9<EMA21 + High<EMA9)")
-    print(f"Exit: 2.5x ATR Adaptive SL | $10 TP | $2 Trailing (after $5 profit) | Breakeven (after $5 profit)")
+    print(f"Exit: 1.5x ATR Adaptive SL | $10 TP | $2 Trailing (after $5 profit) | Breakeven (after $5 profit)")
     print("="*80)
     
     tick_count = 0
@@ -1069,9 +1069,9 @@ def complete_entry_analysis():
                             elif pos_ticket in logger.breakeven_5dollar_activated:
                                 active_sl_display = logger.breakeven_5dollar_activated[pos_ticket]
                             else:
-                                # Calculate current base ATR SL (2.5x multiplier)
+                                # Calculate current base ATR SL (1.5x multiplier)
                                 entry_p = pos.price_open
-                                active_sl_display = (entry_p - (atr * 2.5)) if pos_type == "BUY" else (entry_p + (atr * 2.5))
+                                active_sl_display = (entry_p - (atr * 1.5)) if pos_type == "BUY" else (entry_p + (atr * 1.5))
 
                         # Print one-liner
                         print_one_liner(
@@ -1122,10 +1122,10 @@ def complete_entry_analysis():
                                     tp_dist = 10.0
                                     
                                     if signal == 'BUY':
-                                        sl_price = round(current_price - (atr * 2.0), digits)
+                                        sl_price = round(current_price - (atr * 1.5), digits)
                                         tp_price = round(current_price + tp_dist, digits)
                                     else:
-                                        sl_price = round(current_price + (atr * 2.0), digits)
+                                        sl_price = round(current_price + (atr * 1.5), digits)
                                         tp_price = round(current_price - tp_dist, digits)
 
                                     result = mt5.order_send({

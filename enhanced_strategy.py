@@ -25,7 +25,7 @@ class EnhancedTradingStrategy:
         self.tick_count = 0
         
         # Exit Configuration (Points-based)
-        self.atr_sl_multiplier = 2.0    # Stop loss at 2.0x ATR
+        self.atr_sl_multiplier = 1.5    # Stop loss at 1.5x ATR
         self.tp_points = 10.0           # Take profit after 10.0 pts move
         self.breakeven_points = 3.0     # Activate breakeven after 3.0 pts move
         self.trailing_points = 5.0      # Activate trailing after 5.0 pts move
@@ -195,12 +195,12 @@ class EnhancedTradingStrategy:
         ema9 = close.ewm(span=9, adjust=False).mean()
         ema21 = close.ewm(span=21, adjust=False).mean()
         
-        # ATR calculation (Wilder's, 5 period)
+        # ATR calculation (Wilder's, 20 period)
         tr1 = df['high'] - df['low']
         tr2 = (df['high'] - close.shift()).abs()
         tr3 = (df['low'] - close.shift()).abs()
         tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        atr_val = tr.ewm(alpha=1.0/14, adjust=False).mean()
+        atr_val = tr.ewm(alpha=1.0/20, adjust=False).mean()
         
         return {
                 'rsi': rsi.iloc[-1] if len(rsi) > 0 and not pd.isna(rsi.iloc[-1]) else 50,
@@ -295,7 +295,7 @@ class EnhancedTradingStrategy:
         return 0.0
 
     def execute_trade(self, signal: str, analysis: Dict):
-        """Execute trade with adaptive 2.5x ATR SL and $10 TP"""
+        """Execute trade with adaptive 1.5x ATR(20) SL and $10 TP"""
         try:
             tick = mt5.symbol_info_tick(self.symbol)
             if not tick:
