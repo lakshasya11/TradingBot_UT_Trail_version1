@@ -28,10 +28,10 @@ def main():
     
     print("Global MT5 connection established.")
     
-    # Initialize the strategy bot
+    # Initialize the strategy bot with chart enabled
     SYMBOL = "XAUUSD" 
     try:
-        bot = TripleConfirmationBot(symbol=SYMBOL)
+        bot = TripleConfirmationBot(symbol=SYMBOL, enable_chart=True)
     except Exception as e:
         print(f"CRITICAL: Failed to initialize bot: {e}")
         mt5.shutdown()
@@ -46,8 +46,8 @@ def main():
             # Run the data fetch and signal check cycle
             bot.run_strategy_cycle()
             
-            # Pause for 10 seconds before the next check
-            time.sleep(10) 
+            # Pause for 1 second before the next check
+            time.sleep(1) 
             
         except KeyboardInterrupt:
             print("\nStrategy manually stopped by user.")

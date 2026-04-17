@@ -207,7 +207,12 @@ def execute_trade_order():
         
     data = request.get_json()
     symbol = data.get('symbol', 'EURUSD')
-    volume = float(data.get('volume', 0.01))
+    try:
+        volume = float(data.get('volume', 0.01))
+        if math.isnan(volume) or volume <= 0:
+            return jsonify({"error": "Invalid volume value."}), 400
+    except (ValueError, TypeError):
+        return jsonify({"error": "Volume must be a valid number."}), 400
     direction = data.get('direction', 'BUY')
     
     symbol_info = mt5.symbol_info(symbol)
